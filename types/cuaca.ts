@@ -1,9 +1,12 @@
 export interface Cuaca {
     tanggal: string;
-    kodeCuaca: string;
-    ketCuaca?: string;
-    suhu: string;
-    kelembapan: string;
+    suhuMin?: number | null;
+    suhuMax?: number | null;
+    kelembapanMin?: number | null;
+    kelembapanMax?: number | null;
+    kelembapan: number;
+    suhu: number;
+    kodeCuaca: number;
     arahAngin: string;
-    kecepatanAngin: string;
+    kecepatanAngin: number;
 }

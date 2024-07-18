@@ -112,21 +112,34 @@ daftar_provinsi.forEach(async (provinsi) => {
     const dataCsv = await fetch(`https://data.bmkg.go.id/DataMKG/MEWS/DigitalForecast/CSV/kecamatanforecast-${provinsi}.csv`);
     const data = await dataCsv.text();
     const dataSplit = data.split('\n');
-    const dataJson = dataSplit.map((item) => {
+    const headers = dataSplit[0].split(';');
+    const rows = dataSplit.slice(1);
+    const dataJson = rows.map((item) => {
         const itemSplit = item.split(';');
+        if(itemSplit.length !== headers.length) return null;
+
         const kodeKecamatan = itemSplit[0];
         const tanggal = itemSplit[1];
-        const kodeCuaca = itemSplit[6];
-        const suhu = itemSplit[7];
-        const kelembapan = itemSplit[8];
+        const suhuMin = itemSplit[2] ? parseFloat(itemSplit[2]) : null;
+        const suhuMax = itemSplit[3] ? parseFloat(itemSplit[3]) : null;
+        const kelembapanMin = itemSplit[4] ? parseFloat(itemSplit[4]) : null;
+        const kelembapanMax = itemSplit[5] ? parseFloat(itemSplit[5]) : null;
+        const kelembapan = itemSplit[6] ? parseFloat(itemSplit[6]) : 0;
+        const suhu = itemSplit[7] ? parseFloat(itemSplit[7]) : 0;
+        const kodeCuaca = itemSplit[8] ? parseInt(itemSplit[8]) : 0;
         const arahAngin = itemSplit[9];
-        const kecepatanAngin = itemSplit[10];
+        const kecepatanAngin = itemSplit[10] ? parseInt(itemSplit[10]) : 0;
+        
         return {
             kodeKecamatan,
             tanggal,
-            kodeCuaca,
-            suhu,
+            suhuMin,
+            suhuMax,
+            kelembapanMin,
+            kelembapanMax,
             kelembapan,
+            suhu,
+            kodeCuaca,
             arahAngin,
             kecepatanAngin
         };
@@ -136,11 +149,11 @@ daftar_provinsi.forEach(async (provinsi) => {
     const dataPerKodeKecamatan: { [key: string]: Cuaca[] } = {};
     for (let i = 0; i < dataJson.length; i++) {
         const item = dataJson[i];
-        if (dataPerKodeKecamatan[item.kodeKecamatan]) {
-            dataPerKodeKecamatan[item.kodeKecamatan].push(item);
-        } else {
-            dataPerKodeKecamatan[item.kodeKecamatan] = [item];
+        if(item === null) continue;
+        if (!dataPerKodeKecamatan[item.kodeKecamatan]) {
+            dataPerKodeKecamatan[item.kodeKecamatan] = [];
         }
+        dataPerKodeKecamatan[item.kodeKecamatan].push(item);
     }
 
     const dataPerKodeKecamatanArray = Object.keys(dataPerKodeKecamatan).map((kodeKecamatan) => {
@@ -148,10 +161,13 @@ daftar_provinsi.forEach(async (provinsi) => {
         const cuaca: Cuaca[] = dataPerKodeKecamatan[kodeKecamatan].map((item) => {
             return {
                 tanggal: item.tanggal,
-                kodeCuaca: item.kodeCuaca,
-                ketCuaca: kodeCuaca[item.kodeCuaca],
-                suhu: item.suhu,
+                suhuMin: item.suhuMin,
+                suhuMax: item.suhuMax,
+                kelembapanMin: item.kelembapanMin,
+                kelembapanMax: item.kelembapanMax,
                 kelembapan: item.kelembapan,
+                suhu: item.suhu,
+                kodeCuaca: item.kodeCuaca,
                 arahAngin: item.arahAngin,
                 kecepatanAngin: item.kecepatanAngin
             };
