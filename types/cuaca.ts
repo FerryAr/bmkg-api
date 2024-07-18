@@ -7,6 +7,7 @@ export interface Cuaca {
     kelembapan: number;
     suhu: number;
     kodeCuaca: number;
+    ketCuaca?: string;
     arahAngin: string;
     kecepatanAngin: number;
 }

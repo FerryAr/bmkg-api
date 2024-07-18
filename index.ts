@@ -168,6 +168,7 @@ daftar_provinsi.forEach(async (provinsi) => {
                 kelembapan: item.kelembapan,
                 suhu: item.suhu,
                 kodeCuaca: item.kodeCuaca,
+                ketCuaca: kodeCuaca[item.kodeCuaca],
                 arahAngin: item.arahAngin,
                 kecepatanAngin: item.kecepatanAngin
             };
