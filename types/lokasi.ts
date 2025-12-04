@@ -1,8 +1,14 @@
 export interface Lokasi {
-    kodeKecamatan: string;
-    namaKecamatan: string;
-    namaKabupaten: string;
-    namaProvinsi: string;
-    latitude: string;
-    longitude: string;
+  adm1: string;
+  adm2: string;
+  adm3: string;
+  adm4: string;
+  provinsi: string;
+  kotkab: string;
+  kecamatan: string;
+  desa: string;
+  lon: number;
+  lat: number;
+  timezone: string;
+  type?: string;
 }

@@ -1,182 +1,126 @@
+import { mkdir, writeFile, stat } from "node:fs/promises";
+import type { Data } from "./types/data";
 import type { Cuaca } from "./types/cuaca";
-import type { Lokasi } from "./types/lokasi";
 
-import { mkdir, unlink } from "node:fs/promises";
-
-const daftar_provinsi = [
-    'aceh',
-    'sumut',
-    'sumbar',
-    'riau',
-    'jambi',
-    'sumsel',
-    'bengkulu',
-    'lampung',
-    'babel',
-    'kepriau',
-    'jakarta',
-    'jawabarat',
-    'jawatengah',
-    'jogyakarta',
-    'jawatimur',
-    'banten',
-    'bali',
-    'ntt',
-    'ntb',
-    'kalbar',
-    'kalteng',
-    'kalsel',
-    'kaltim',
-    'kaluta',
-    'sulut',
-    'sulteng',
-    'sulsel',
-    'sultenggara',
-    'gorontalo',
-    'sulbar',
-    'maluku',
-    'malut',
-    'papuabarat',
-    'papua'
-];
-
-const kodeCuaca: { [key: string]: string } = {
-    0: "Cerah",
-    1: "Cerah Berawan",
-    2: "Cerah Berawan",
-    3: "Berawan",
-    4: "Berawan Tebal",
-    5: "Udara Kabur",
-    100: "Cerah",
-    101: "Cerah Berawan",
-    102: "Cerah Berawan",
-    103: "Berawan",
-    104: "Berawan Tebal",
-    10: "Asap",
-    45: "Berkabut",
-    60: "Hujan Ringan",
-    61: "Hujan Sedang",
-    63: "Hujan Lebat",
-    80: "Hujan Lokal",
-    95: "Hujan Petir",
-    97: "Hujan Petir"
-};
-
-async function getDataKecamatan() {
-    const dataKecamatan = await fetch("https://data.bmkg.go.id/DataMKG/MEWS/DigitalForecast/CSV/kecamatan_geofeatures.csv");
-    const dataKecamatanText = await dataKecamatan.text();
-    const dataKecamatanSplit = dataKecamatanText.split('\n');
-    const dataKecamatanJson = dataKecamatanSplit.map((item) => {
-        const itemSplit = item.split(';');
-        const kodeKecamatan = itemSplit[0];
-        const namaKecamatan = itemSplit[1];
-        const namaKabupaten = itemSplit[2];
-        const namaProvinsi = itemSplit[3];
-        const latitude = itemSplit[4];
-        const longitude = itemSplit[5];
-        return {
-            kodeKecamatan,
-            namaKecamatan,
-            namaKabupaten,
-            namaProvinsi,
-            latitude,
-            longitude
-        } as Lokasi;
-    });
-    return dataKecamatanJson;
+async function ensureDir(p: string) {
+  await mkdir(p, { recursive: true }).catch(() => {});
 }
 
-const dataKecamatanJson = await getDataKecamatan();
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
-function getLokasiByKodeKecamatan(kodeKecamatan: string) {
-    const lokasi = dataKecamatanJson.find((item) => item.kodeKecamatan === kodeKecamatan);
+async function fetchJson(url: string): Promise<any> {
+  const r = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Collector)",
+      Accept: "application/json",
+    },
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(`HTTP ${r.status} on ${url}. ${t.slice(0, 200)}`);
+  }
+  return r.json();
+}
 
-    if (lokasi) {
-        return lokasi;
-    } else {
-        return {
-            kodeKecamatan: kodeKecamatan,
-            namaKecamatan: "",
-            namaKabupaten: "",
-            namaProvinsi: "",
-            latitude: "",
-            longitude: ""
-        } as Lokasi;
+async function fetchBmkg(url: string): Promise<any> {
+  while (true) {
+    const r = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Collector)",
+        Accept: "application/json",
+      },
+    });
+
+    if (r.status === 429) {
+      await sleep(1500 + Math.random() * 400);
+      continue;
     }
+
+    if (!r.ok) {
+      const t = await r.text();
+      throw new Error(`HTTP ${r.status} on ${url}. ${t.slice(0, 200)}`);
+    }
+
+    return r.json();
+  }
 }
 
+async function cacheValid(path: string): Promise<boolean> {
+  try {
+    const s = await stat(path);
+    const age = Date.now() - s.mtimeMs;
+    return age <= 24 * 60 * 60 * 1000;
+  } catch {
+    return false;
+  }
+}
 
-daftar_provinsi.forEach(async (provinsi) => {
-    console.log("Mengambil data cuaca untuk provinsi " + provinsi.toUpperCase() + "...");
+async function main() {
+  const provRaw = await fetchJson("https://wilayah.id/api/provinces.json");
+  const daftarProv: Data[] = provRaw.data;
 
-    const dataCsv = await fetch(`https://data.bmkg.go.id/DataMKG/MEWS/DigitalForecast/CSV/kecamatanforecast-${provinsi}.csv`);
-    const data = await dataCsv.text();
-    const dataSplit = data.split('\n');
-    const dataJson = dataSplit.map((item) => {
-        const itemSplit = item.split(';');
-        const kodeKecamatan = itemSplit[0];
-        const tanggal = itemSplit[1];
-        const kodeCuaca = itemSplit[6];
-        const suhu = itemSplit[7];
-        const kelembapan = itemSplit[8];
-        const arahAngin = itemSplit[9];
-        const kecepatanAngin = itemSplit[10];
-        return {
-            kodeKecamatan,
-            tanggal,
-            kodeCuaca,
-            suhu,
-            kelembapan,
-            arahAngin,
-            kecepatanAngin
-        };
-    });
+  await ensureDir("data");
 
-    // split data per kode kecamatan
-    const dataPerKodeKecamatan: { [key: string]: Cuaca[] } = {};
-    for (let i = 0; i < dataJson.length; i++) {
-        const item = dataJson[i];
-        if (dataPerKodeKecamatan[item.kodeKecamatan]) {
-            dataPerKodeKecamatan[item.kodeKecamatan].push(item);
-        } else {
-            dataPerKodeKecamatan[item.kodeKecamatan] = [item];
+  for (const prov of daftarProv) {
+    const baseProv = `data/${prov.name}`;
+    await ensureDir(baseProv);
+
+    const kotaRaw = await fetchJson(
+      `https://wilayah.id/api/regencies/${prov.code}.json`,
+    );
+    const daftarKota: Data[] = kotaRaw.data;
+
+    for (const kota of daftarKota) {
+      const baseKota = `${baseProv}/${kota.name}`;
+      await ensureDir(baseKota);
+
+      const kecRaw = await fetchJson(
+        `https://wilayah.id/api/districts/${kota.code}.json`,
+      );
+      const daftarKec: Data[] = kecRaw.data;
+
+      for (const kec of daftarKec) {
+        const baseKec = `${baseKota}/${kec.name}`;
+        await ensureDir(baseKec);
+
+        const desaRaw = await fetchJson(
+          `https://wilayah.id/api/villages/${kec.code}.json`,
+        );
+        const desaList: Data[] = desaRaw.data;
+
+        for (const desa of desaList) {
+          const out = `${baseKec}/${desa.name}.json`;
+          const url = `https://api.bmkg.go.id/publik/prakiraan-cuaca?adm4=${desa.code}`;
+
+          const valid = await cacheValid(out);
+          if (valid) {
+            console.log(
+              `Skip <1d: ${prov.name} / ${kota.name} / ${kec.name} / ${desa.name}`,
+            );
+            continue;
+          }
+
+          console.log(
+            `Fetch: ${prov.name} / ${kota.name} / ${kec.name} / ${desa.name}`,
+          );
+
+          const jd = await fetchBmkg(url);
+          const cuacaData: Cuaca[] = jd.data[0].cuaca;
+
+          await writeFile(out, JSON.stringify(cuacaData, null, 2), {
+            flag: "w",
+          });
+
+          await sleep(1200 + Math.random() * 300);
         }
+      }
     }
+  }
+}
 
-    const dataPerKodeKecamatanArray = Object.keys(dataPerKodeKecamatan).map((kodeKecamatan) => {
-        const lokasi = getLokasiByKodeKecamatan(kodeKecamatan);
-        const cuaca: Cuaca[] = dataPerKodeKecamatan[kodeKecamatan].map((item) => {
-            return {
-                tanggal: item.tanggal,
-                kodeCuaca: item.kodeCuaca,
-                ketCuaca: kodeCuaca[item.kodeCuaca],
-                suhu: item.suhu,
-                kelembapan: item.kelembapan,
-                arahAngin: item.arahAngin,
-                kecepatanAngin: item.kecepatanAngin
-            };
-        });
-        return {
-            kodeKecamatan,
-            namaKecamatan: lokasi.namaKecamatan,
-            namaKabupaten: lokasi.namaKabupaten,
-            namaProvinsi: lokasi.namaProvinsi,
-            latitude: lokasi.latitude,
-            longitude: lokasi.longitude,
-            data: cuaca
-        };
-    });
-
-    dataPerKodeKecamatanArray.forEach(async (item) => {
-        if (item.kodeKecamatan === "") return;
-        if (item.data.length === 0) return;
-
-        await mkdir(`./data`, { recursive: true });
-        Bun.write(`./data/${item.kodeKecamatan}.json`, JSON.stringify(item)).then(() => {
-            console.log(`File ${item.kodeKecamatan}.json berhasil dibuat`);
-        }).catch((err) => {
-            console.error(`File ${item.kodeKecamatan}.json gagal dibuat`);
-            console.error(err);
-        });
-    });
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
 });
